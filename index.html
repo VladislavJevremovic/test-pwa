@@ -16,18 +16,39 @@
   <style>
     html, body { margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background:#0b1020; color:#e5e7eb; }
     .wrap { max-width: 720px; margin: 40px auto; padding: 16px; }
-    .card { background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 20px; box-shadow: 0 4px 24px rgba(0,0,0,.25); }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 20px; box-shadow: 0 4px 24px rgba(0,0,0,.25); margin-bottom: 20px; }
     button { padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background:#111827; color:#e5e7eb; cursor:pointer; }
     button:disabled { opacity: .5; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #1f2937; }
+    button.primary { background: #1d4ed8; border-color: #2563eb; }
+    button.primary:hover:not(:disabled) { background: #2563eb; }
+    button.danger { background: #dc2626; border-color: #ef4444; }
+    button.danger:hover:not(:disabled) { background: #ef4444; }
     .pill { display:inline-block; padding: 4px 10px; border-radius:999px; border:1px solid #334155; margin-right:8px; font-size:12px; }
     a { color:#60a5fa; }
+    
+    /* Todo styles */
+    .todo-form { display: flex; gap: 10px; margin-bottom: 20px; }
+    .todo-input { flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background: #1f2937; color: #e5e7eb; }
+    .todo-input:focus { outline: none; border-color: #60a5fa; }
+    .todo-list { list-style: none; padding: 0; margin: 0; }
+    .todo-item { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px; background: #1f2937; border-radius: 8px; border: 1px solid #374151; }
+    .todo-item.completed { opacity: 0.6; }
+    .todo-item.completed .todo-text { text-decoration: line-through; }
+    .todo-checkbox { width: 18px; height: 18px; }
+    .todo-text { flex: 1; font-size: 14px; }
+    .todo-actions { display: flex; gap: 8px; }
+    .todo-actions button { padding: 6px 10px; font-size: 12px; }
+    .edit-input { flex: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid #334155; background: #111827; color: #e5e7eb; }
+    .edit-input:focus { outline: none; border-color: #60a5fa; }
+    .empty-state { text-align: center; padding: 40px 20px; color: #6b7280; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>✅ Test PWA</h1>
-      <p>This is a minimal Progressive Web App designed to run from <strong>GitHub Pages</strong> without going through an app store.</p>
+      <h1>✅ Test PWA with Todos</h1>
+      <p>This is a minimal Progressive Web App with todo functionality, designed to run from <strong>GitHub Pages</strong> without going through an app store.</p>
 
       <div style="margin:12px 0;">
         <span class="pill" id="installStatus">install: n/a</span>
@@ -46,6 +67,23 @@
         Start URL and scope are <code>./</code> so it also works from <code>https://USERNAME.github.io/REPO/</code>.<br>
         Source: <a href="https://github.com/">GitHub</a> • Built: <span id="builtDate"></span>
       </p>
+    </div>
+
+    <div class="card">
+      <h2>📝 Todo List</h2>
+      
+      <form class="todo-form" id="todoForm">
+        <input type="text" class="todo-input" id="todoInput" placeholder="Add a new todo..." required>
+        <button type="submit" class="primary">Add</button>
+      </form>
+
+      <ul class="todo-list" id="todoList">
+        <!-- Todos will be rendered here -->
+      </ul>
+
+      <div class="empty-state" id="emptyState" style="display: none;">
+        <p>No todos yet. Add one above to get started!</p>
+      </div>
     </div>
   </div>
 
@@ -110,6 +148,160 @@
         alert('Service worker not controlling this page yet. Reload once.');
       }
     });
+
+    // Todo CRUD functionality
+    class TodoManager {
+      constructor() {
+        this.todos = this.loadTodos();
+        this.currentEditId = null;
+        this.init();
+      }
+
+      init() {
+        this.renderTodos();
+        this.bindEvents();
+      }
+
+      bindEvents() {
+        document.getElementById('todoForm').addEventListener('submit', (e) => {
+          e.preventDefault();
+          this.addTodo();
+        });
+      }
+
+      loadTodos() {
+        try {
+          return JSON.parse(localStorage.getItem('pwa-todos') || '[]');
+        } catch {
+          return [];
+        }
+      }
+
+      saveTodos() {
+        localStorage.setItem('pwa-todos', JSON.stringify(this.todos));
+      }
+
+      generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2);
+      }
+
+      addTodo() {
+        const input = document.getElementById('todoInput');
+        const text = input.value.trim();
+        
+        if (!text) return;
+
+        const todo = {
+          id: this.generateId(),
+          text,
+          completed: false,
+          createdAt: new Date().toISOString()
+        };
+
+        this.todos.unshift(todo);
+        this.saveTodos();
+        this.renderTodos();
+        input.value = '';
+      }
+
+      deleteTodo(id) {
+        this.todos = this.todos.filter(todo => todo.id !== id);
+        this.saveTodos();
+        this.renderTodos();
+      }
+
+      toggleTodo(id) {
+        const todo = this.todos.find(t => t.id === id);
+        if (todo) {
+          todo.completed = !todo.completed;
+          this.saveTodos();
+          this.renderTodos();
+        }
+      }
+
+      startEdit(id) {
+        this.currentEditId = id;
+        this.renderTodos();
+      }
+
+      cancelEdit() {
+        this.currentEditId = null;
+        this.renderTodos();
+      }
+
+      saveEdit(id, newText) {
+        const todo = this.todos.find(t => t.id === id);
+        if (todo && newText.trim()) {
+          todo.text = newText.trim();
+          this.saveTodos();
+        }
+        this.currentEditId = null;
+        this.renderTodos();
+      }
+
+      renderTodos() {
+        const todoList = document.getElementById('todoList');
+        const emptyState = document.getElementById('emptyState');
+
+        if (this.todos.length === 0) {
+          todoList.style.display = 'none';
+          emptyState.style.display = 'block';
+          return;
+        }
+
+        todoList.style.display = 'block';
+        emptyState.style.display = 'none';
+
+        todoList.innerHTML = this.todos.map(todo => {
+          const isEditing = this.currentEditId === todo.id;
+          
+          if (isEditing) {
+            return `
+              <li class="todo-item ${todo.completed ? 'completed' : ''}">
+                <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} 
+                       onchange="todoManager.toggleTodo('${todo.id}')">
+                <input type="text" class="edit-input" value="${this.escapeHtml(todo.text)}" 
+                       id="edit-${todo.id}" onkeydown="if(event.key==='Enter') todoManager.saveEdit('${todo.id}', this.value); if(event.key==='Escape') todoManager.cancelEdit()">
+                <div class="todo-actions">
+                  <button class="primary" onclick="todoManager.saveEdit('${todo.id}', document.getElementById('edit-${todo.id}').value)">Save</button>
+                  <button onclick="todoManager.cancelEdit()">Cancel</button>
+                </div>
+              </li>
+            `;
+          }
+
+          return `
+            <li class="todo-item ${todo.completed ? 'completed' : ''}">
+              <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} 
+                     onchange="todoManager.toggleTodo('${todo.id}')">
+              <span class="todo-text">${this.escapeHtml(todo.text)}</span>
+              <div class="todo-actions">
+                <button onclick="todoManager.startEdit('${todo.id}')">Edit</button>
+                <button class="danger" onclick="todoManager.deleteTodo('${todo.id}')">Delete</button>
+              </div>
+            </li>
+          `;
+        }).join('');
+
+        // Auto-focus edit input if editing
+        if (this.currentEditId) {
+          const editInput = document.getElementById(`edit-${this.currentEditId}`);
+          if (editInput) {
+            editInput.focus();
+            editInput.select();
+          }
+        }
+      }
+
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+    }
+
+    // Initialize todo manager
+    const todoManager = new TodoManager();
   </script>
 </body>
 </html>
