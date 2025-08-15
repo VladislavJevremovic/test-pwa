@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test PWA</title>
+
+  <!-- PWA essentials -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="./icons/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <style>
+    html, body { margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background:#0b1020; color:#e5e7eb; }
+    .wrap { max-width: 720px; margin: 40px auto; padding: 16px; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 20px; box-shadow: 0 4px 24px rgba(0,0,0,.25); }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background:#111827; color:#e5e7eb; cursor:pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .pill { display:inline-block; padding: 4px 10px; border-radius:999px; border:1px solid #334155; margin-right:8px; font-size:12px; }
+    a { color:#60a5fa; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>✅ Test PWA</h1>
+      <p>This is a minimal Progressive Web App designed to run from <strong>GitHub Pages</strong> without going through an app store.</p>
+
+      <div style="margin:12px 0;">
+        <span class="pill" id="installStatus">install: n/a</span>
+        <span class="pill" id="swStatus">sw: waiting</span>
+        <span class="pill" id="offlineStatus">offline: ?</span>
+      </div>
+
+      <button id="installBtn" disabled>Install</button>
+      <button id="checkUpdateBtn">Check for update</button>
+
+      <p style="margin-top:16px">
+        Try going offline and reloading – this page should still work thanks to the service worker cache.
+      </p>
+
+      <p style="font-size:13px;opacity:.8;margin-top:20px">
+        Start URL and scope are <code>./</code> so it also works from <code>https://USERNAME.github.io/REPO/</code>.<br>
+        Source: <a href="https://github.com/">GitHub</a> • Built: <span id="builtDate"></span>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // stamp build time
+    document.getElementById('builtDate').textContent = new Date(1755241652236).toISOString();
+
+    // Service worker registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(reg => {
+            document.getElementById('swStatus').textContent = 'sw: ' + (reg.installing ? 'installing' : reg.waiting ? 'waiting' : 'active');
+            // Listen for updates
+            if (reg.waiting) {
+              document.getElementById('swStatus').textContent = 'sw: update ready';
+            }
+            reg.addEventListener('updatefound', () => {
+              document.getElementById('swStatus').textContent = 'sw: update found';
+            });
+          })
+          .catch(err => {
+            document.getElementById('swStatus').textContent = 'sw: error';
+            console.error('SW reg failed', err);
+          });
+      });
+    }
+
+    // install prompt
+    let deferredPrompt;
+    const installBtn = document.getElementById('installBtn');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.disabled = false;
+      document.getElementById('installStatus').textContent = 'install: available';
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      document.getElementById('installStatus').textContent = 'install: ' + outcome;
+      deferredPrompt = null;
+      installBtn.disabled = true;
+    });
+
+    // offline indicator
+    function updateOnline() {
+      document.getElementById('offlineStatus').textContent = 'offline: ' + (navigator.onLine ? 'no' : 'yes');
+    }
+    window.addEventListener('online', updateOnline);
+    window.addEventListener('offline', updateOnline);
+    updateOnline();
+
+    // check for updates
+    document.getElementById('checkUpdateBtn').addEventListener('click', async () => {
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CHECK_FOR_UPDATE' });
+        alert('Asked service worker to check for updates.');
+      } else {
+        alert('Service worker not controlling this page yet. Reload once.');
+      }
+    });
+  </script>
+</body>
+</html>
